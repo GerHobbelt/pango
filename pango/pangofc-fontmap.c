@@ -1678,6 +1678,9 @@ pango_fc_font_map_finalize (GObject *object)
   if (fcfontmap->substitute_destroy)
     fcfontmap->substitute_destroy (fcfontmap->substitute_data);
 
+  if (fcfontmap->priv->config)
+    FcConfigDestroy (fcfontmap->priv->config);
+
   G_OBJECT_CLASS (pango_fc_font_map_parent_class)->finalize (object);
 }
 
@@ -1887,8 +1890,8 @@ ensure_families (PangoFcFontMap *fcfontmap)
 	  if (temp_family)
 	    {
               variable = FALSE;
-              variable = FcPatternGetBool (fontset->fonts[i], FC_VARIABLE, 0, &variable);
-              if (variable)
+              res = FcPatternGetBool (fontset->fonts[i], FC_VARIABLE, 0, &variable);
+              if (res == FcResultMatch && variable)
                 temp_family->variable = TRUE;
 
 	      FcPatternReference (fontset->fonts[i]);
