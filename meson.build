@@ -4,13 +4,17 @@ project('pango', 'c', 'cpp',
         default_options: [
           'buildtype=debugoptimized',
           'warning_level=1',
-          # We only need c99, but glib needs GNU-specific features
-          # https://github.com/mesonbuild/meson/issues/2289
-          'c_std=gnu99',
+          'c_std=gnu11',
         ],
         meson_version : '>= 1.2.0')
 
-add_project_arguments([ '-D_POSIX_C_SOURCE=200809L', '-D_POSIX_THREAD_SAFE_FUNCTIONS', '-D_GNU_SOURCE', ], language: 'c')
+add_project_arguments([
+    '-D_POSIX_C_SOURCE=200809L',
+    '-D_POSIX_THREAD_SAFE_FUNCTIONS',
+    '-D_GNU_SOURCE',
+  ],
+  language: 'c'
+)
 
 pango_prefix = get_option('prefix')
 pango_libdir = join_paths(pango_prefix, get_option('libdir'))
@@ -52,6 +56,15 @@ host_system = host_machine.system()
 if host_system == 'windows'
   add_project_arguments('-D_WIN32_WINNT=_WIN32_WINNT_WIN10', language: 'c')
 endif
+
+# Keep in sync with glib_req_version
+add_project_arguments([
+    '-DG_LOG_USE_STRUCTURED=1',
+    '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_80',
+    '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_80',
+  ],
+  language: 'c'
+)
 
 # Compiler and linker flags
 common_cflags = []
@@ -201,7 +214,7 @@ endif
 # Dependencies
 pango_deps = []
 
-glib_req_version = '>= 2.70'
+glib_req_version = '>= 2.80'
 fribidi_req_version = '>= 1.0.6'
 libthai_req_version = '>= 0.1.9'
 harfbuzz_req_version = '>= 8.4.0'
@@ -277,18 +290,7 @@ fontconfig_dep = dependency('fontconfig', version: fontconfig_req_version,
 
 if fontconfig_dep.found()
   pango_deps += fontconfig_dep
-
-  if fontconfig_dep.version().version_compare('>=2.12.92')
-    pango_conf.set('HAVE_FCWEIGHTFROMOPENTYPEDOUBLE', 1)
-  endif
 endif
-
-if pango_conf.has('HAVE_FCWEIGHTFROMOPENTYPEDOUBLE')
-  res = 'YES'
-else
-  res = 'NO'
-endif
-message('fontconfig has FcWeightFromOpenTypeDouble: ' + res)
 
 # If option is 'auto' or 'enabled' it is not required to find freetype2 on the
 # system because a fallback is done at the end. Override 'disabled' option on
@@ -560,7 +562,7 @@ if not meson.is_subproject()
 endif
 
 summary('Fontconfig', pango_font_backends.contains('freetype'), section: 'Font backends')
-summary('DirectWrite', pango_font_backends.contains('windows'), section: 'Font backends')
+summary('DirectWrite', pango_font_backends.contains('win32'), section: 'Font backends')
 summary('CoreText', pango_font_backends.contains('quartz'), section: 'Font backends')
 
 summary('Cairo', cairo_dep.found(), section: 'Features')
