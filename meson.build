@@ -1,5 +1,5 @@
 project('pango', 'c', 'cpp',
-        version: '1.56.0',
+        version: '1.56.3',
         license: 'LGPLv2.1+',
         default_options: [
           'buildtype=debugoptimized',
@@ -515,6 +515,16 @@ if cairo_dwrite_dep.found()
   pango_conf.set('HAVE_CAIRO_WIN32_DIRECTWRITE', 1)
 endif
 
+# introspection
+gir = find_program('g-ir-scanner', required : get_option('introspection'))
+
+if not gir.found() and get_option('introspection').enabled()
+  error('Introspection enabled, but g-ir-scanner not found.')
+endif
+
+build_gir = gir.found() and (get_option('introspection').enabled() or
+                             (get_option('introspection').allowed() and get_option('documentation')))
+
 # libsysprof-capture support
 libsysprof_capture_dep = dependency('sysprof-capture-4',
   required: get_option('sysprof'),
@@ -543,9 +553,7 @@ pango_inc = include_directories('pango')
 subdir('pango')
 subdir('utils')
 subdir('tools')
-if get_option('documentation')
-  subdir('docs')
-endif
+subdir('docs')
 if get_option('build-testsuite')
   subdir('tests')
 endif
@@ -570,10 +578,11 @@ summary('Linker', cc.get_linker_id(), section: 'Toolchain')
 
 summary('Debugging', get_option('debug'), section: 'Build')
 summary('Optimization', get_option('optimization'), section: 'Build')
-summary('Introspection', gir.found(), section: 'Build')
+summary('Introspection', build_gir, section: 'Build')
 summary('Documentation', get_option('documentation'), section: 'Build')
-summary('Build Testsuite', get_option('build-testsuite'), section: 'Build')
-summary('Build Examples', get_option('build-examples'), section: 'Build')
+summary('Man pages', get_option('man-pages'), section: 'Build')
+summary('Tests', get_option('build-testsuite'), section: 'Build')
+summary('Examples', get_option('build-examples'), section: 'Build')
 
 summary('prefix', pango_prefix, section: 'Directories')
 summary('includedir', pango_includedir, section: 'Directories')
