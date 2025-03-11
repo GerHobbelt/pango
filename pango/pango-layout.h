@@ -79,10 +79,19 @@ typedef enum {
  * breaking at grapheme boundaries that are determined by the Unicode text
  * segmentation algorithm.
  */
+
+/**
+ * PANGO_WRAP_NONE:
+ *
+ * do not wrap.
+ *
+ * Since: 1.56
+ */
 typedef enum {
   PANGO_WRAP_WORD,
   PANGO_WRAP_CHAR,
-  PANGO_WRAP_WORD_CHAR
+  PANGO_WRAP_WORD_CHAR,
+  PANGO_WRAP_NONE PANGO_AVAILABLE_ENUMERATOR_IN_1_56
 } PangoWrapMode;
 
 /**
@@ -261,8 +270,6 @@ PANGO_AVAILABLE_IN_1_6
 PangoEllipsizeMode pango_layout_get_ellipsize (PangoLayout        *layout);
 PANGO_AVAILABLE_IN_1_16
 gboolean           pango_layout_is_ellipsized (PangoLayout        *layout);
-PANGO_AVAILABLE_IN_1_56
-gboolean           pango_layout_is_truncated  (PangoLayout        *layout);
 
 PANGO_AVAILABLE_IN_1_16
 int      pango_layout_get_unknown_glyphs_count (PangoLayout    *layout);

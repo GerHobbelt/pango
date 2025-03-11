@@ -37,6 +37,7 @@ test_serialize_attr_list (void)
     "0 1 family    Times",
     "0 1 family    \"Times\"    ",
     "0 1 family    \"Times\\n\\\"New\\\" Roman\"    ",
+    "0 1 family    Times    ",
     "0 10 foreground red, 5 15 weight bold, 0 200 font-desc \"Sans Small-Caps 10\"",
     "0 10 foreground red\n5 15 weight bold\n0 200 font-desc \"Sans Small-Caps 10\"",
     "  0   10   fallback  false,\n 5 15 weight semilight\n\n \n \n",
@@ -44,6 +45,9 @@ test_serialize_attr_list (void)
     "0 -1 size 10",
     "0 1 weight 700, 2 4 weight book",
     "0 200 rise 100\n5 15 family Times\n10 11 size 10240\n11 100 fallback 0\n30 60 stretch 2\n",
+    "weight bold",
+    "font-features \"tnum=1,sinf\"",
+    "0 -1 word 1",
     "",
   };
   const char *roundtripped[] = {
@@ -53,6 +57,7 @@ test_serialize_attr_list (void)
     "0 1 family \"Times\"",
     "0 1 family \"Times\"",
     "0 1 family \"Times\\n\\\"New\\\" Roman\"",
+    "0 1 family \"Times    \"",
     "0 10 foreground #ffff00000000\n5 15 weight bold\n0 200 font-desc \"Sans Small-Caps 10\"",
     "0 10 foreground #ffff00000000\n5 15 weight bold\n0 200 font-desc \"Sans Small-Caps 10\"",
     "0 10 fallback false\n5 15 weight semilight",
@@ -60,12 +65,16 @@ test_serialize_attr_list (void)
     "0 4294967295 size 10",
     "0 1 weight bold\n2 4 weight book",
     "0 200 rise 100\n5 15 family \"Times\"\n10 11 size 10240\n11 100 fallback false\n30 60 stretch condensed",
+    "0 4294967295 weight bold",
+    "0 4294967295 font-features \"tnum=1,sinf\"",
+    "0 4294967295 word 1",
     "",
   };
   const char *invalid[] = {
     "not an attr list",
     "0 -1 FOREGROUND xyz",
     ",,bla.wewq",
+    " 0 10 font-desc aCantarell 11\"",
   };
 
   for (int i = 0; i < G_N_ELEMENTS (valid); i++)

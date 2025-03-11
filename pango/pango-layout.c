@@ -236,7 +236,6 @@ pango_layout_init (PangoLayout *layout)
   layout->is_wrapped = FALSE;
   layout->ellipsize = PANGO_ELLIPSIZE_NONE;
   layout->is_ellipsized = FALSE;
-  layout->is_truncated = FALSE;
 }
 
 static void
@@ -360,7 +359,7 @@ pango_layout_get_context (PangoLayout *layout)
  *   wrapping or ellipsization should be performed.
  *
  * Sets the width to which the lines of the `PangoLayout` should wrap or
- * ellipsized.
+ * get ellipsized.
  *
  * The default value is -1: no width set.
  */
@@ -444,7 +443,7 @@ pango_layout_set_height (PangoLayout *layout,
        * Bug 549003
        */
       if (layout->ellipsize != PANGO_ELLIPSIZE_NONE &&
-          !(layout->lines && !layout->is_ellipsized && !layout->is_truncated &&
+          !(layout->lines && layout->is_ellipsized == FALSE &&
             height < 0 && layout->line_count <= (guint) -height))
         layout_changed (layout);
     }
@@ -524,7 +523,6 @@ pango_layout_get_wrap (PangoLayout *layout)
  * Queries whether the layout had to wrap any paragraphs.
  *
  * This returns %TRUE if a positive width is set on @layout,
- * ellipsization mode of @layout is set to %PANGO_ELLIPSIZE_NONE,
  * and there are paragraphs exceeding the layout width that have
  * to be wrapped.
  *
@@ -1204,27 +1202,6 @@ pango_layout_is_ellipsized (PangoLayout *layout)
   pango_layout_check_lines (layout);
 
   return layout->is_ellipsized;
-}
-
-/**
- * pango_layout_is_truncated:
- * @layout: a `PangoLayout`
- *
- * Queries whether the layout does not show all content because of
- * height limitations.
- *
- * Returns: true if any paragraphs have been omitted due to height
- *
- * Since: 1.56
- */
-gboolean
-pango_layout_is_truncated (PangoLayout *layout)
-{
-  g_return_val_if_fail (layout != NULL, FALSE);
-
-  pango_layout_check_lines (layout);
-
-  return layout->is_truncated;
 }
 
 /**
@@ -3271,7 +3248,6 @@ pango_layout_clear_lines (PangoLayout *layout)
   layout->logical_rect_cached = FALSE;
   layout->ink_rect_cached = FALSE;
   layout->is_ellipsized = FALSE;
-  layout->is_truncated = FALSE;
   layout->is_wrapped = FALSE;
 }
 
@@ -3577,6 +3553,8 @@ can_break_at (PangoLayout   *layout,
 {
   if (offset == layout->n_chars)
     return TRUE;
+  else if (wrap == PANGO_WRAP_NONE)
+    return FALSE;
   else if (wrap == PANGO_WRAP_CHAR)
     return layout->log_attrs[offset].is_char_break;
   else
@@ -3929,7 +3907,7 @@ find_break_extra_width (PangoLayout    *layout,
   return 0;
 }
 
-#if 1
+#if 0
 # define DEBUG debug
 static int pango_layout_line_get_width (PangoLayoutLine *line);
 static void
@@ -4444,6 +4422,9 @@ should_ellipsize_current_line (PangoLayout    *layout,
 {
   if (G_LIKELY (layout->ellipsize == PANGO_ELLIPSIZE_NONE || layout->width < 0))
     return FALSE;
+
+  if (layout->wrap == PANGO_WRAP_NONE)
+    return TRUE;
 
   if (layout->height >= 0)
     {
@@ -4984,11 +4965,7 @@ pango_layout_check_lines (PangoLayout *layout)
         }
 
       if (layout->height >= 0 && state.remaining_height < state.line_height)
-        {
-          done = TRUE;
-          if (end < (layout->text + layout->length))
-            layout->is_truncated = TRUE;
-        }
+        done = TRUE;
 
       if (!done)
         start_offset += pango_utf8_strlen (start, (end - start) + delim_len);
