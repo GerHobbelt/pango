@@ -22,9 +22,6 @@ pacman --noconfirm -S --needed \
     mingw-w64-$MSYS2_ARCH-toolchain \
     mingw-w64-$MSYS2_ARCH-cantarell-fonts
 
-meson --buildtype debug _build
-cd _build
-ninja
-
-# FIXME: Fix tests
-meson test || true
+meson setup --buildtype debug _build
+meson compile -C _build
+meson test -C _build -t "$MESON_TEST_TIMEOUT_MULTIPLIER" --print-errorlogs --suite pango
