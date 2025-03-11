@@ -1,5 +1,5 @@
 project('pango', 'c', 'cpp',
-        version: '1.54.0',
+        version: '1.56.0',
         license: 'LGPLv2.1+',
         default_options: [
           'buildtype=debugoptimized',
@@ -48,6 +48,10 @@ pango_osxversion = [osx_current, '@0@.@1@.0'.format(osx_current, pango_interface
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
 host_system = host_machine.system()
+
+if host_system == 'windows'
+  add_project_arguments('-D_WIN32_WINNT=_WIN32_WINNT_WIN10', language: 'c')
+endif
 
 # Compiler and linker flags
 common_cflags = []
@@ -197,11 +201,11 @@ endif
 # Dependencies
 pango_deps = []
 
-glib_req_version = '>= 2.62'
+glib_req_version = '>= 2.70'
 fribidi_req_version = '>= 1.0.6'
 libthai_req_version = '>= 0.1.9'
-harfbuzz_req_version = '>= 2.6.0'
-fontconfig_req_version = '>= 2.13.0'
+harfbuzz_req_version = '>= 8.4.0'
+fontconfig_req_version = '>= 2.15.0'
 xft_req_version = '>= 2.0.0'
 cairo_req_version = '>= 1.12.10'
 
@@ -346,10 +350,8 @@ if host_system == 'darwin'
 endif
 
 # Check for dwrite_3.h (from more recent Windows SDK or mingw-w64)
-if host_system == 'windows'
-  if cpp.has_header('dwrite_3.h')
-    pango_conf.set('HAVE_DWRITE_3_H', 1)
-  endif
+if host_system == 'windows' and not cpp.has_header('dwrite_3.h')
+  error('Windows backend enabled but dwrite_3.h not found.')
 endif
 
 # Enable cairo-ft with FreeType and FontConfig support if
@@ -557,13 +559,13 @@ if not meson.is_subproject()
   meson.add_dist_script('build-aux/meson/dist-docs.py')
 endif
 
-summary('Font backends', pango_font_backends)
+summary('Fontconfig', pango_font_backends.contains('freetype'), section: 'Font backends')
+summary('DirectWrite', pango_font_backends.contains('windows'), section: 'Font backends')
+summary('CoreText', pango_font_backends.contains('quartz'), section: 'Font backends')
 
-summary('Cairo support', cairo_dep.found(), section: 'Features')
-summary('Fontconfig support', fontconfig_dep.found(), section: 'Features')
-summary('FreeType support', freetype_dep.found(), section: 'Features')
-summary('Thai support', thai_dep.found(), section: 'Features')
-summary('Sysprof support', libsysprof_capture_dep.found(), section: 'Features')
+summary('Cairo', cairo_dep.found(), section: 'Features')
+summary('Thai', thai_dep.found(), section: 'Features')
+summary('Sysprof', libsysprof_capture_dep.found(), section: 'Features')
 
 summary('Compiler', cc.get_id(), section: 'Toolchain')
 summary('Linker', cc.get_linker_id(), section: 'Toolchain')

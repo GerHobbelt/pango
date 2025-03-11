@@ -259,6 +259,10 @@ static PangoFont * pango_fc_font_map_reload_font (PangoFontMap *fontmap,
                                                   PangoContext *context,
                                                   const char   *variations);
 
+static gboolean  pango_fc_font_map_add_font_file (PangoFontMap  *fontmap,
+                                                  const char    *filename,
+                                                  GError       **error);
+
 static guint    pango_fc_font_face_data_hash  (PangoFcFontFaceData *key);
 static gboolean pango_fc_font_face_data_equal (PangoFcFontFaceData *key1,
 					       PangoFcFontFaceData *key2);
@@ -1063,29 +1067,22 @@ static gboolean
 pango_fc_is_supported_font_format (FcPattern* pattern)
 {
   FcResult res;
-  const char *fontformat;
   const char *file;
+  const char *fontwrapper;
 
-  /* Harfbuzz loads woff fonts, but we don't get any glyphs */
+  /* Patterns without FC_FILE are problematic, since our caching is based
+   * on filenames.
+   */
   res = FcPatternGetString (pattern, FC_FILE, 0, (FcChar8 **)(void*)&file);
-  if (res == FcResultMatch &&
-      (g_str_has_suffix (file, ".woff") ||
-       g_str_has_suffix (file, ".woff2")))
-    return FALSE;
-
-  res = FcPatternGetString (pattern, FC_FONTFORMAT, 0, (FcChar8 **)(void*)&fontformat);
   if (res != FcResultMatch)
     return FALSE;
 
   /* Harfbuzz supports only SFNT fonts. */
-  /* FIXME: "CFF" is used for both CFF in OpenType and bare CFF files, but
-   * HarfBuzz does not support the later and FontConfig does not seem
-   * to have a way to tell them apart.
-   */
-  if (g_ascii_strcasecmp (fontformat, "TrueType") == 0 ||
-      g_ascii_strcasecmp (fontformat, "CFF") == 0)
-    return TRUE;
-  return FALSE;
+  res = FcPatternGetString (pattern, FC_FONT_WRAPPER, 0, (FcChar8 **)(void*)&fontwrapper);
+  if (res != FcResultMatch)
+    return FALSE;
+
+  return strcmp (fontwrapper, "SFNT") == 0;
 }
 
 static FcFontSet *
@@ -1590,6 +1587,7 @@ pango_fc_font_map_class_init (PangoFcFontMapClass *class)
   pclass = g_type_class_get_private ((GTypeClass *) class, PANGO_TYPE_FONT_MAP);
 
   pclass->reload_font = pango_fc_font_map_reload_font;
+  pclass->add_font_file = pango_fc_font_map_add_font_file;
 }
 
 
@@ -2601,8 +2599,8 @@ pango_fc_font_map_get_config_fonts (PangoFcFontMap *fcfontmap)
 
       wait_for_fc_init ();
 
-      sets[0] = FcConfigGetFonts (fcfontmap->priv->config, 0);
-      sets[1] = FcConfigGetFonts (fcfontmap->priv->config, 1);
+      sets[0] = FcConfigGetFonts (fcfontmap->priv->config, FcSetApplication);
+      sets[1] = FcConfigGetFonts (fcfontmap->priv->config, FcSetSystem);
       fcfontmap->priv->fonts = filter_by_format (sets, 2);
     }
 
@@ -2735,7 +2733,7 @@ _pango_fc_font_map_get_coverage (PangoFcFontMap *fcfontmap,
        * doesn't require loading the font
        */
       if (FcPatternGetCharSet (fcfont->font_pattern, FC_CHARSET, 0, &charset) != FcResultMatch)
-        return NULL;
+        return pango_coverage_new ();
 
       data->coverage = _pango_fc_font_map_fc_to_coverage (charset);
     }
@@ -3694,4 +3692,36 @@ pango_fc_font_map_get_hb_face (PangoFcFontMap *fcfontmap,
     }
 
   return data->hb_face;
+}
+
+static gboolean
+pango_fc_font_map_add_font_file (PangoFontMap  *fontmap,
+                                 const char    *filename,
+                                 GError       **error)
+{
+  PangoFcFontMap *fcfontmap = PANGO_FC_FONT_MAP (fontmap);
+  FcConfig *config;
+
+  if (fcfontmap->priv->config)
+    config = fcfontmap->priv->config;
+  else
+    config = FcConfigGetCurrent ();
+
+  if (!FcConfigAppFontAddFile (config, (FcChar8 *) filename))
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   "Adding font %s to fontconfig configuration failed",
+                   filename);
+      return FALSE;
+    }
+
+  if (config != fcfontmap->priv->config)
+    pango_fc_font_map_set_config (fcfontmap, config);
+  else
+    {
+      g_clear_pointer (&fcfontmap->priv->fonts, FcFontSetDestroy);
+      pango_fc_font_map_config_changed (fcfontmap);
+    }
+
+  return TRUE;
 }
