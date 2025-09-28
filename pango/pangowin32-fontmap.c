@@ -99,8 +99,6 @@ static PangoFont *pango_win32_font_map_real_find_font (PangoWin32FontMap        
                                                        PangoWin32Face              *face,
                                                        const PangoFontDescription  *description);
 
-static void       pango_win32_fontmap_cache_clear    (PangoWin32FontMap            *win32fontmap);
-
 static PangoWin32Family *pango_win32_get_font_family (PangoWin32FontMap            *win32fontmap,
                                                       const char                   *family_name);
 
@@ -634,10 +632,6 @@ create_standard_family (PangoWin32FontMap *win32fontmap,
 
               new_face->is_synthetic = TRUE;
 
-              new_face->has_cmap = old_face->has_cmap;
-              new_face->cmap_format = old_face->cmap_format;
-              new_face->cmap = _pango_win32_copy_cmap (old_face->cmap, old_face->cmap_format);
-
               new_face->cached_fonts = NULL;
 
               new_face->family = new_family;
@@ -673,7 +667,6 @@ pango_win32_font_map_init (PangoWin32FontMap *win32fontmap)
                            pango_win32_dwrite_font_release);
 
   win32fontmap->font_cache = pango_win32_font_cache_new ();
-  win32fontmap->freed_fonts = g_queue_new ();
 
   pango_win32_dwrite_font_map_populate (win32fontmap);
 
@@ -694,9 +687,6 @@ pango_win32_font_map_init (PangoWin32FontMap *win32fontmap)
 static void
 pango_win32_font_map_fini (PangoWin32FontMap *win32fontmap)
 {
-  g_list_foreach (win32fontmap->freed_fonts->head, (GFunc)g_object_unref, NULL);
-  g_queue_free (win32fontmap->freed_fonts);
-
   pango_win32_font_cache_free (win32fontmap->font_cache);
 
   g_hash_table_destroy (win32fontmap->dwrite_fonts);
@@ -832,13 +822,7 @@ pango_win32_font_map_for_display (void)
 void
 pango_win32_shutdown_display (void)
 {
-  if (default_fontmap)
-    {
-      pango_win32_fontmap_cache_clear (default_fontmap);
-      g_object_unref (default_fontmap);
-
-      default_fontmap = NULL;
-    }
+  g_clear_object (&default_fontmap);
 }
 
 static void
@@ -1164,8 +1148,6 @@ pango_win32_font_map_real_find_font (PangoWin32FontMap          *win32fontmap,
           PING (("size matches"));
 
           g_object_ref (win32font);
-          if (win32font->in_cache)
-            _pango_win32_fontmap_cache_remove (fontmap, win32font);
 
           return (PangoFont *)win32font;
         }
@@ -1178,7 +1160,7 @@ pango_win32_font_map_real_find_font (PangoWin32FontMap          *win32fontmap,
   if (!win32font)
     return NULL;
 
-  win32font->win32face = face;
+  win32font->win32face = g_object_ref (face);
   face->cached_fonts = g_slist_prepend (face->cached_fonts, win32font);
 
   return (PangoFont *)win32font;
@@ -1759,10 +1741,6 @@ pango_win32_insert_font (PangoWin32FontMap *win32fontmap,
 
   win32face->is_synthetic = is_synthetic;
 
-  win32face->has_cmap = TRUE;
-  win32face->cmap_format = 0;
-  win32face->cmap = NULL;
-
   win32face->cached_fonts = NULL;
 
   win32face->family = win32family =
@@ -1869,10 +1847,7 @@ pango_win32_face_finalize (GObject *object)
 
   g_free (win32face->face_name);
 
-  g_free (win32face->cmap);
-
-  g_slist_free (win32face->cached_fonts);
-//  g_slist_free_full (win32face->cached_fonts, g_object_unref); // This doesn't work.
+  g_assert (win32face->cached_fonts == NULL);
 
   G_OBJECT_CLASS (pango_win32_family_parent_class)->finalize (object);
 }
@@ -1926,28 +1901,6 @@ pango_win32_font_map_get_font_cache (PangoFontMap *font_map)
   g_return_val_if_fail (PANGO_WIN32_IS_FONT_MAP (font_map), NULL);
 
   return PANGO_WIN32_FONT_MAP (font_map)->font_cache;
-}
-
-void
-_pango_win32_fontmap_cache_remove (PangoFontMap   *fontmap,
-                                   PangoWin32Font *win32font)
-{
-  PangoWin32FontMap *win32fontmap = PANGO_WIN32_FONT_MAP (fontmap);
-  GList *link = g_queue_find (win32fontmap->freed_fonts, win32font);
-
-  if (link)
-    g_queue_delete_link (win32fontmap->freed_fonts, link);
-  win32font->in_cache = FALSE;
-
-  g_object_unref (win32font);
-}
-
-static void
-pango_win32_fontmap_cache_clear (PangoWin32FontMap *win32fontmap)
-{
-  g_list_foreach (win32fontmap->freed_fonts->head, (GFunc)g_object_unref, NULL);
-  g_queue_free (win32fontmap->freed_fonts);
-  win32fontmap->freed_fonts = g_queue_new ();
 }
 
 static PangoFontset *
@@ -2008,8 +1961,8 @@ pango_win32_font_map_load_fontset (PangoFontMap                 *fontmap,
           g_hash_table_insert (warned_fonts, g_strdup (ctmp1), GINT_TO_POINTER (1));
 
           ctmp2 = pango_font_description_to_string (tmp_desc);
-          g_warning ("couldn't load font \"%s\", falling back to \"%s\", "
-                     "expect ugly output.", ctmp1, ctmp2);
+          g_printerr ("couldn't load font \"%s\", falling back to \"%s\", "
+                      "expect ugly output.", ctmp1, ctmp2);
           g_free (ctmp2);
         }
       G_UNLOCK (warned_fonts);
@@ -2044,8 +1997,8 @@ pango_win32_font_map_load_fontset (PangoFontMap                 *fontmap,
 
           ctmp2 = pango_font_description_to_string (tmp_desc);
 
-          g_warning ("couldn't load font \"%s\", falling back to \"%s\", "
-                     "expect ugly output.", ctmp1, ctmp2);
+          g_printerr ("couldn't load font \"%s\", falling back to \"%s\", "
+                      "expect ugly output.", ctmp1, ctmp2);
           g_free (ctmp2);
         }
       G_UNLOCK (warned_fonts);

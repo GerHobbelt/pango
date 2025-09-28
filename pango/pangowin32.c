@@ -40,11 +40,8 @@
 #include "pangowin32-private.h"
 #include "pango-coverage-private.h"
 
-#define MAX_FREED_FONTS 256
-
 gboolean _pango_win32_debug = FALSE;
 
-static void pango_win32_font_dispose    (GObject             *object);
 static void pango_win32_font_finalize   (GObject             *object);
 
 static PangoFontDescription *pango_win32_font_describe          (PangoFont        *font);
@@ -224,7 +221,6 @@ _pango_win32_font_class_init (PangoWin32FontClass *class)
   PangoFontClassPrivate *pclass;
 
   object_class->finalize = pango_win32_font_finalize;
-  object_class->dispose = pango_win32_font_dispose;
 
   font_class->describe = pango_win32_font_describe;
   font_class->describe_absolute = pango_win32_font_describe_absolute;
@@ -816,38 +812,6 @@ pango_win32_font_get_metrics_factor (PangoFont *font)
 }
 
 static void
-pango_win32_fontmap_cache_add (PangoFontMap   *fontmap,
-			       PangoWin32Font *win32font)
-{
-  PangoWin32FontMap *win32fontmap = PANGO_WIN32_FONT_MAP (fontmap);
-
-  if (win32fontmap->freed_fonts->length == MAX_FREED_FONTS)
-    {
-      PangoWin32Font *old_font = g_queue_pop_tail (win32fontmap->freed_fonts);
-      g_object_unref (old_font);
-    }
-
-  g_object_ref (win32font);
-  g_queue_push_head (win32fontmap->freed_fonts, win32font);
-  win32font->in_cache = TRUE;
-}
-
-static void
-pango_win32_font_dispose (GObject *object)
-{
-  PangoWin32Font *win32font = PANGO_WIN32_FONT (object);
-
-  /* If the font is not already in the freed-fonts cache, add it,
-   * if it is already there, do nothing and the font will be
-   * freed.
-   */
-  if (!win32font->in_cache && win32font->fontmap)
-    pango_win32_fontmap_cache_add (win32font->fontmap, win32font);
-
-  G_OBJECT_CLASS (_pango_win32_font_parent_class)->dispose (object);
-}
-
-static void
 free_metrics_info (PangoWin32MetricsInfo *info)
 {
   pango_font_metrics_unref (info->metrics);
@@ -873,8 +837,8 @@ pango_win32_font_finalize (GObject *object)
   g_slist_foreach (win32font->metrics_by_lang, (GFunc)free_metrics_info, NULL);
   g_slist_free (win32font->metrics_by_lang);
 
-  if (win32font->win32face)
-    pango_win32_font_entry_remove (win32font->win32face, PANGO_FONT (win32font));
+  pango_win32_font_entry_remove (win32font->win32face, PANGO_FONT (win32font));
+  g_object_unref (win32font->win32face);
 
   g_hash_table_destroy (win32font->glyph_info);
 
@@ -920,7 +884,7 @@ pango_win32_font_describe_absolute (PangoFont *font)
 
 static PangoCoverage *
 pango_win32_font_get_coverage (PangoFont     *font,
-			       PangoLanguage *lang G_GNUC_UNUSED)
+                               PangoLanguage *lang G_GNUC_UNUSED)
 {
   PangoWin32Face *win32face = ((PangoWin32Font *)font)->win32face;
 
@@ -1364,63 +1328,4 @@ pango_win32_font_create_hb_font (PangoFont *font)
   hb_face_destroy (face);
 
   return hb_font;
-}
-
-gpointer
-_pango_win32_copy_cmap (gpointer cmap, guint16 cmap_format)
-{
-  if (!cmap)
-    return NULL;
-
-  if (cmap_format == 12)
-    {
-      struct format_12_cmap *new_table;
-      struct format_12_cmap *old_table;
-      guint32 *tbl, *tbl_end;
-
-      old_table = (struct format_12_cmap *) cmap;
-
-      new_table = g_malloc (old_table->length);
-      memcpy (old_table, new_table, sizeof (struct format_12_cmap));
-
-      tbl_end = (guint32 *) ((char *) new_table + new_table->length);
-      tbl = new_table->groups;
-
-      while (tbl < tbl_end)
-        {
-          *tbl = GUINT32_FROM_BE (*tbl);
-          tbl++;
-        }
-
-      return new_table;
-    }
-  else if (cmap_format == 4)
-    {
-      struct format_4_cmap *new_table;
-      struct format_4_cmap *old_table;
-      guint16 *tbl, *tbl_end;
-
-      old_table = (struct format_4_cmap *) cmap;
-
-      new_table = g_malloc (old_table->length);
-      memcpy (old_table, new_table, sizeof (struct format_4_cmap));
-
-      tbl_end = (guint16 *)((char *) new_table + new_table->length);
-      tbl = &new_table->reserved;
-
-      while (tbl < tbl_end)
-        {
-          *tbl = GUINT16_FROM_BE (*tbl);
-          tbl++;
-        }
-
-      return new_table;
-    }
-  else
-    {
-      /* got non-null cmap but unknown format, it shouldn't happen */
-      g_assert_not_reached ();
-    }
-
-  return NULL;
 }
