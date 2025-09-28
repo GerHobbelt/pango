@@ -1,5 +1,5 @@
 project('pango', 'c', 'cpp',
-        version: '1.56.4',
+        version: '1.56.5',
         license: 'LGPLv2.1+',
         default_options: [
           'buildtype=debugoptimized',
@@ -206,14 +206,14 @@ endif
 pango_deps = []
 
 glib_major_req = 2
-glib_minor_req = 80
+glib_minor_req = 82
 
 glib_req       = '>= @0@.@1@'.format(glib_major_req, glib_minor_req)
 gi_req         = '>= 1.83.2'
 fribidi_req    = '>= 1.0.6'
 libthai_req    = '>= 0.1.9'
 harfbuzz_req   = '>= 8.4.0'
-fontconfig_req = '>= 2.15.0'
+fontconfig_req = '>= 2.17.0'
 xft_req        = '>= 2.0.0'
 cairo_req      = '>= 1.18.0'
 
@@ -341,6 +341,9 @@ endif
 
 has_core_text = false
 if host_system == 'darwin'
+  # for viewer-cocoa.m
+  add_languages('objc', native : false)
+
   has_core_text = cc.links('''#include <CoreText/CoreText.h>
                               int main (void) {
                                 CTGetCoreTextVersion ();

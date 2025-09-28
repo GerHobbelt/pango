@@ -96,7 +96,7 @@ cairo_font_map_iface_init (PangoCairoFontMapIface *iface)
 }
 
 G_DEFINE_TYPE_WITH_CODE (PangoCairoFcFontMap, pango_cairo_fc_font_map, PANGO_TYPE_FC_FONT_MAP,
-    { G_IMPLEMENT_INTERFACE (PANGO_TYPE_CAIRO_FONT_MAP, cairo_font_map_iface_init) })
+                         G_IMPLEMENT_INTERFACE (PANGO_TYPE_CAIRO_FONT_MAP, cairo_font_map_iface_init))
 
 static void
 pango_cairo_fc_font_map_fontset_key_substitute (PangoFcFontMap    *fcfontmap G_GNUC_UNUSED,
@@ -111,7 +111,7 @@ pango_cairo_fc_font_map_fontset_key_substitute (PangoFcFontMap    *fcfontmap G_G
     cairo_ft_font_options_substitute (pango_fc_fontset_key_get_context_key (fontkey),
 				      pattern);
 
-  FcDefaultSubstitute (pattern);
+  FcConfigSetDefaultSubstitute (pango_fc_font_map_get_config (fcfontmap), pattern);
 }
 
 static double
