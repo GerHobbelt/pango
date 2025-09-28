@@ -230,7 +230,7 @@ mathlib_dep = cc.find_library('m', required: false)
 glib_dep = dependency('glib-2.0', version: glib_req)
 gobject_dep = dependency('gobject-2.0', version: glib_req)
 gio_dep = dependency('gio-2.0', version: glib_req)
-gi_dep = dependency('gobject-introspection-1.0', version: gi_req)
+gi_dep = dependency('gobject-introspection-1.0', version: gi_req, required: get_option('introspection').enabled())
 fribidi_dep = dependency('fribidi', version: fribidi_req, default_options: ['docs=false'])
 pango_deps += [mathlib_dep, glib_dep, gobject_dep, gio_dep, fribidi_dep]
 
@@ -260,13 +260,19 @@ fontconfig_option = get_option('fontconfig').disable_auto_if(not fontconfig_requ
 harfbuzz_fallback_options = [
   'coretext=enabled',
   'directwrite=enabled',
-  'gdi=enabled'
+  'gdi=enabled',
+  'cairo=disabled',
+  'docs=disabled',
+  'utilities=disabled',
+  'tests=disabled',
 ]
 
 # Enable FreeType support in HarfBuzz if building it as a
 # subproject and FontConfig support is required or requested
 if fontconfig_required or fontconfig_option.enabled()
   harfbuzz_fallback_options += 'freetype=enabled'
+else
+  harfbuzz_fallback_options += 'freetype=disabled'
 endif
 
 harfbuzz_dep = dependency('harfbuzz',
