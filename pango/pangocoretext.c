@@ -26,7 +26,6 @@
 #include "pangocoretext-private.h"
 #include "pango-impl-utils.h"
 #include <hb-coretext.h>
-#include <hb-ot.h>
 
 struct _PangoCoreTextFontPrivate
 {
@@ -38,6 +37,8 @@ struct _PangoCoreTextFontPrivate
   PangoCoverage *coverage;
 
   PangoFontMap *fontmap;
+
+  char *features;
 };
 
 G_DEFINE_TYPE_WITH_PRIVATE (PangoCoreTextFont, pango_core_text_font, PANGO_TYPE_FONT)
@@ -54,7 +55,28 @@ pango_core_text_font_finalize (GObject *object)
   if (priv->coverage)
     g_object_unref (priv->coverage);
 
+  g_free (priv->features);
+
   G_OBJECT_CLASS (pango_core_text_font_parent_class)->finalize (object);
+}
+
+static const char *
+pango_core_text_font_get_features_string (PangoCoreTextFont *ctfont)
+{
+  PangoCoreTextFontPrivate *priv = ctfont->priv;
+
+  if (!priv->features)
+    {
+      PangoVariant variant = PANGO_VARIANT_NORMAL;
+
+      if (pango_core_text_font_key_get_synthetic_small_caps (priv->key))
+        variant = PANGO_VARIANT_SMALL_CAPS;
+
+      priv->features = pango_combine_features (variant,
+                                               pango_core_text_font_key_get_features (priv->key));
+    }
+
+  return priv->features;
 }
 
 static PangoFontDescription *
@@ -65,6 +87,7 @@ pango_core_text_font_describe (PangoFont *font)
   CTFontDescriptorRef ctfontdesc;
   PangoFontDescription *desc;
   const char *variations;
+  const char *features;
 
   ctfontdesc = CTFontCopyFontDescriptor (priv->font_ref);
   desc = _pango_core_text_font_description_from_ct_font_descriptor (ctfontdesc);
@@ -74,8 +97,12 @@ pango_core_text_font_describe (PangoFont *font)
   if (variations)
     pango_font_description_set_variations (desc, variations);
 
-  if (pango_core_text_font_key_get_synthetic_small_caps (priv->key))
-    pango_font_description_set_variant (desc, PANGO_VARIANT_SMALL_CAPS);
+  features = pango_core_text_font_get_features_string (ctfont);
+  if (*features)
+    {
+      pango_font_description_set_variant (desc, pango_features_get_variant (features));
+      pango_font_description_set_features (desc, features);
+    }
 
   return desc;
 }
@@ -189,46 +216,41 @@ pango_core_text_font_create_hb_font (PangoFont *font)
       hb_font_t *hb_font;
       double x_scale, y_scale;
       int size;
-      const char *variations;
 
       matrix = pango_core_text_font_key_get_matrix (ctfont->priv->key);
       pango_matrix_get_font_scale_factors (matrix, &x_scale, &y_scale);
       size = pango_core_text_font_key_get_size (ctfont->priv->key);
-      variations = pango_core_text_font_key_get_variations (ctfont->priv->key);
 
       hb_font = hb_coretext_font_create (ctfont->priv->font_ref);
       hb_font_set_scale (hb_font, size / x_scale, size / y_scale);
-
-      if (variations)
-        {
-          hb_face_t *face;
-          unsigned int n_axes;
-
-          face = hb_font_get_face (hb_font);
-          n_axes = hb_ot_var_get_axis_infos (face, 0, NULL, NULL);
-          if (n_axes > 0)
-            {
-              hb_ot_var_axis_info_t *axes;
-              float *coords;
-
-              axes = g_newa (hb_ot_var_axis_info_t, n_axes);
-              coords = g_newa (float, n_axes);
-
-              hb_ot_var_get_axis_infos (face, 0, &n_axes, axes);
-              for (unsigned int i = 0; i < n_axes; i++)
-                coords[axes[i].axis_index] = axes[i].default_value;
-
-              pango_parse_variations (variations, axes, n_axes, coords);
-
-              hb_font_set_var_coords_design (hb_font, coords, n_axes);
-            }
-        }
-
 
       return hb_font;
     }
 
   return hb_font_get_empty ();
+}
+
+static void
+pango_core_text_font_get_features (PangoFont    *font,
+                                   hb_feature_t *features,
+                                   guint         len,
+                                   guint        *num_features)
+{
+  PangoCoreTextFont *ctfont = (PangoCoreTextFont *)font;
+  const char *str = pango_core_text_font_get_features_string (ctfont);
+
+  if (*str)
+    {
+      char **feats = g_strsplit (str, ",", -1);
+
+      for (int i = 0; feats[i] && *num_features < len; i++)
+        {
+          if (hb_feature_from_string (feats[i], -1, &features[*num_features]))
+            (*num_features)++;
+        }
+
+      g_strfreev (feats);
+    }
 }
 
 static void
@@ -250,6 +272,7 @@ pango_core_text_font_class_init (PangoCoreTextFontClass *class)
   font_class->get_coverage = pango_core_text_font_get_coverage;
   font_class->get_font_map = pango_core_text_font_get_font_map;
   font_class->create_hb_font = pango_core_text_font_create_hb_font;
+  font_class->get_features = pango_core_text_font_get_features;
 }
 
 void
@@ -303,6 +326,8 @@ _pango_core_text_font_set_font_key (PangoCoreTextFont    *font,
       g_object_unref (priv->coverage);
       priv->coverage = NULL;
     }
+
+  g_clear_pointer (&priv->features, g_free);
 }
 
 PangoCoreTextFontKey *
